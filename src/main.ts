@@ -66,17 +66,41 @@ function extractQuizQuestions(): QuizQuestion[] {
 
 function selectAnswers(answers: z.infer<typeof QuizAnswersSchema>): void {
   answers.answers.forEach(answer => {
-    // Find the radio input for the correct answer
-    const radioInput = document.querySelector(`input[name="mc-question-${answer.questionIndex}"][value="${answer.correctAnswerIndex}"]`) as HTMLInputElement;
+    console.log(`🎯 Attempting to select answer ${answer.correctAnswerIndex} for question ${answer.questionIndex}`);
     
-    if (radioInput) {
-      radioInput.checked = true;
-      radioInput.click(); // Trigger any event handlers
+    // Find the label for this specific answer
+    const labelElement = document.querySelector(`label[for="mc-question-${answer.questionIndex}-answer-${answer.correctAnswerIndex}"]`) as HTMLLabelElement;
+    
+    if (labelElement) {
+      labelElement.click();
       console.log(`✅ Selected answer ${answer.correctAnswerIndex} for question ${answer.questionIndex}: ${answer.explanation}`);
     } else {
-      console.warn(`❌ Could not find radio input for question ${answer.questionIndex}, answer ${answer.correctAnswerIndex}`);
+      console.warn(`❌ Could not find label for question ${answer.questionIndex}, answer ${answer.correctAnswerIndex}`);
+      
+      // Debug: Show available labels
+      const allLabels = document.querySelectorAll('label[for*="mc-question"]');
+      console.log('Available labels:', Array.from(allLabels).map(label => label.getAttribute('for')));
     }
   });
+
+  // After selecting all answers, click the first button[type=button]
+  setTimeout(() => {
+    const firstButton = document.querySelector('button[type="button"]') as HTMLButtonElement;
+    if (firstButton) {
+      firstButton.click();
+      console.log('🚀 Clicked the first button to submit/continue');
+    } else {
+      console.warn('❌ Could not find button[type="button"] to click');
+      
+      // Debug: Show available buttons
+      const allButtons = document.querySelectorAll('button');
+      console.log('Available buttons:', Array.from(allButtons).map(btn => ({
+        type: btn.getAttribute('type'),
+        textContent: btn.textContent?.trim(),
+        className: btn.className
+      })));
+    }
+  }, 500); // Small delay to ensure all selections are processed
 }
 
 async function analyzeQuizQuestions(questions: QuizQuestion[]): Promise<void> {
