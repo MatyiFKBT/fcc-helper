@@ -1,95 +1,120 @@
-import { ModeHandler, LabTask, LabSolution, LabSolutionSchema } from '../types';
+import { ModeHandler, LabSolution, LabSolutionSchema } from '../types';
 import { AIService } from '../services/ai';
 
 export class LabModeHandler implements ModeHandler {
   name = 'LAB';
 
   detect(): boolean {
-    // TODO: Add detection logic for lab pages
-    // Look for common lab indicators like code editors, task lists, etc.
-    return document.querySelector('.lab-container') !== null ||
-           document.querySelector('[data-testid="lab"]') !== null ||
-           document.querySelector('.code-editor') !== null;
+    // Detect lab pages by checking for the specific FCC lab structure
+    return document.querySelector('h1#content-start') !== null &&
+           document.querySelector('section#description') !== null &&
+           document.querySelector('ul.challenge-test-suite') !== null;
   }
 
   async execute(): Promise<void> {
     console.log(`🧪 ${this.name} mode detected`);
     
-    const tasks = this.extractTasks();
+    const labData = this.extractLabData();
     
-    if (tasks.length === 0) {
-      console.log('❌ No lab tasks found');
+    if (!labData.title && !labData.description && labData.testCases.length === 0) {
+      console.log('❌ No lab data found');
       return;
     }
 
-    console.log(`🔍 Found ${tasks.length} lab task(s)`);
-    window.labData = tasks;
+    console.log(`🔍 Found lab: "${labData.title}"`);
+    console.log(`📝 Description length: ${labData.description.length} chars`);
+    console.log(`🧪 Test cases: ${labData.testCases.length}`);
 
-    await this.analyzeAndExecuteTasks(tasks);
+    // Store in global for debugging
+    (window as any).labData = labData;
+
+    await this.analyzeAndExecuteLab(labData);
   }
 
-  private extractTasks(): LabTask[] {
-    // TODO: Implement task extraction based on lab page structure
-    // This is a placeholder for future implementation
-    const tasks: LabTask[] = [];
-    
-    // Example: Look for task descriptions, code requirements, etc.
-    const taskElements = document.querySelectorAll('.task-item, .lab-instruction');
-    
-    taskElements.forEach((element, index) => {
-      const description = element.textContent?.trim();
-      if (description) {
-        tasks.push({
-          id: `task-${index}`,
-          description,
-          type: 'code', // Default to code task
-        });
-      }
-    });
+  private extractLabData(): { title: string; description: string; testCases: string[] } {
+    // Extract lab title from h1#content-start
+    const titleElement = document.querySelector('h1#content-start');
+    const title = titleElement?.textContent?.trim() || '';
 
-    return tasks;
+    // Extract description from section#description
+    const descriptionElement = document.querySelector('section#description');
+    const description = descriptionElement?.textContent?.trim() || '';
+
+    // Extract test cases from ul.challenge-test-suite
+    const testSuiteElement = document.querySelector('ul.challenge-test-suite');
+    const testCases: string[] = [];
+
+    if (testSuiteElement) {
+      const testItems = testSuiteElement.querySelectorAll('li');
+      testItems.forEach(item => {
+        const testText = item.textContent?.trim();
+        if (testText) {
+          testCases.push(testText);
+        }
+      });
+    }
+
+    return {
+      title,
+      description,
+      testCases
+    };
   }
 
-  private async analyzeAndExecuteTasks(tasks: LabTask[]): Promise<void> {
+  private async analyzeAndExecuteLab(labData: { title: string; description: string; testCases: string[] }): Promise<void> {
     try {
-      console.log('🧠 Analyzing lab tasks with Gemini...');
+      console.log('🧠 Analyzing lab with Gemma...');
       
-      const tasksText = tasks.map((task, idx) => 
-        `Task ${idx} (${task.id}): ${task.description}`
-      ).join('\n\n');
+      const prompt = `Analyze this FreeCodeCamp coding lab and provide a complete solution.
 
-      const prompt = `Analyze these coding lab tasks and provide solutions. For each task, provide the code solution and explanation.
+Lab Title: ${labData.title}
 
-${tasksText}
+Description:
+${labData.description}
 
-Return the results in the specified JSON format with task id, solution code, and explanation.`;
+Test Cases:
+${labData.testCases.map((test, i) => `${i + 1}. ${test}`).join('\n')}
+
+Based on the lab title, description, and test cases, provide a complete working solution that passes all tests.
+Return the complete code that can be copy-pasted directly into the code editor.
+
+Respond with JSON in this exact format:
+{
+  "solution": "// Complete working code here that passes all test cases",
+  "explanation": "Brief explanation of how the solution works"
+}`;
 
       const aiService = AIService.getInstance();
-      const solutions = await aiService.generateStructuredResponse(LabSolutionSchema, prompt);
+      const solution = await aiService.generateStructuredResponse(LabSolutionSchema, prompt);
 
-      console.log('📝 Lab analysis complete:', solutions);
-      window.labSolution = solutions;
+      console.log('📝 Lab analysis complete:', solution);
+      window.labSolution = solution;
 
-      this.applySolutions(solutions);
+      this.displaySolution(solution);
 
-      console.log('🎯 Lab tasks completed automatically!');
+      console.log('🎯 Lab solution ready!');
     } catch (error) {
-      console.error('Error analyzing lab tasks:', error);
+      console.error('Error analyzing lab:', error);
     }
   }
 
-  private applySolutions(solutions: LabSolution): void {
-    solutions.tasks.forEach(solution => {
-      console.log(`🔧 Applying solution for ${solution.id}: ${solution.explanation}`);
-      
-      // TODO: Implement solution application based on task type
-      // This could involve:
-      // - Filling code editors
-      // - Creating files
-      // - Running commands
-      // - etc.
-      
-      console.log(`💡 Solution: ${solution.solution}`);
-    });
+  private displaySolution(solution: LabSolution): void {
+    console.log('🔧 COMPLETE SOLUTION:');
+    console.log('=====================================');
+    console.log(solution.solution);
+    console.log('=====================================');
+    console.log(`💡 Explanation: ${solution.explanation}`);
+    console.log('');
+    console.log('📋 Copy the code above and paste it into the code editor!');
+    console.log('💾 Solution also stored in window.labSolution.solution');
+    
+    // Try to automatically copy to clipboard if possible
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(solution.solution).then(() => {
+        console.log('📎 Solution copied to clipboard!');
+      }).catch(() => {
+        console.log('❌ Could not copy to clipboard automatically');
+      });
+    }
   }
 }

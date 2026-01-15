@@ -33,11 +33,8 @@ export interface LabTask {
 }
 
 export const LabSolutionSchema = z.object({
-  tasks: z.array(z.object({
-    id: z.string(),
-    solution: z.string(),
-    explanation: z.string()
-  }))
+  solution: z.string(),
+  explanation: z.string()
 });
 
 export type LabSolution = z.infer<typeof LabSolutionSchema>;
