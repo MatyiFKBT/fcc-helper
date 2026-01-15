@@ -24,6 +24,26 @@ export const QuizAnswersSchema = z.object({
 
 export type QuizAnswers = z.infer<typeof QuizAnswersSchema>;
 
+// BigQuiz-specific types
+export interface BigQuizQuestion {
+  questionNumber: number;
+  question: string;
+  options: Array<{
+    value: string;
+    text: string;
+  }>;
+}
+
+export const BigQuizAnswersSchema = z.object({
+  answers: z.array(z.object({
+    questionNumber: z.number(),
+    correctValue: z.string(),
+    explanation: z.string()
+  }))
+});
+
+export type BigQuizAnswers = z.infer<typeof BigQuizAnswersSchema>;
+
 // Lab-specific types (for future implementation)
 export interface LabTask {
   id: string;
@@ -45,6 +65,8 @@ declare global {
     exampleFn: () => Promise<void>;
     quizData?: QuizQuestion[];
     quizAnswers?: QuizAnswers;
+    bigQuizData?: BigQuizQuestion[];
+    bigQuizAnswers?: BigQuizAnswers;
     labData?: LabTask[];
     labSolution?: LabSolution;
   }
