@@ -17,6 +17,7 @@
     "@ai-sdk/google": "^3.0.9",
     "@google/generative-ai": "^0.24.1",
     "@types/node": "^25.0.8",
-    "ai": "^6.0.37"
+    "ai": "^6.0.37",
+    "zod": "^4.3.5"
   }
 }

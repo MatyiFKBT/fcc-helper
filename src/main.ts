@@ -1,5 +1,6 @@
-import { generateText } from 'ai';
+import { generateObject } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { z } from 'zod';
 
 // @ts-ignore isolatedModules
 console.log('FCC Helper userscript loaded');
@@ -14,11 +15,22 @@ declare global {
 interface QuizQuestion {
   question: string;
   options: string[];
+  questionIndex: number;
 }
+
+// Zod schema for structured quiz answers
+const QuizAnswersSchema = z.object({
+  answers: z.array(z.object({
+    questionIndex: z.number(),
+    correctAnswerIndex: z.number(),
+    explanation: z.string()
+  }))
+});
 
 function extractQuizQuestions(): QuizQuestion[] {
   const fieldsets = document.querySelectorAll('fieldset');
   const quizData: QuizQuestion[] = [];
+  let questionIndex = 0;
 
   fieldsets.forEach(fieldset => {
     // Extract question text from legend
@@ -42,12 +54,81 @@ function extractQuizQuestions(): QuizQuestion[] {
     if (options.length > 0) {
       quizData.push({
         question: questionText,
-        options: options
+        options: options,
+        questionIndex: questionIndex
       });
+      questionIndex++;
     }
   });
 
   return quizData;
+}
+
+function selectAnswers(answers: z.infer<typeof QuizAnswersSchema>): void {
+  answers.answers.forEach(answer => {
+    // Find the radio input for the correct answer
+    const radioInput = document.querySelector(`input[name="mc-question-${answer.questionIndex}"][value="${answer.correctAnswerIndex}"]`) as HTMLInputElement;
+    
+    if (radioInput) {
+      radioInput.checked = true;
+      radioInput.click(); // Trigger any event handlers
+      console.log(`✅ Selected answer ${answer.correctAnswerIndex} for question ${answer.questionIndex}: ${answer.explanation}`);
+    } else {
+      console.warn(`❌ Could not find radio input for question ${answer.questionIndex}, answer ${answer.correctAnswerIndex}`);
+    }
+  });
+}
+
+async function analyzeQuizQuestions(questions: QuizQuestion[]): Promise<void> {
+  try {
+    console.log('🧠 Analyzing quiz questions with Gemini...');
+    
+    // Get API key
+    let apiKey = localStorage.getItem('GOOGLE_API_KEY');
+    
+    if (!apiKey) {
+      apiKey = prompt('Please enter your Google API key (it will be saved in localStorage):');
+      if (!apiKey) {
+        console.error('API key is required to analyze quiz questions');
+        return;
+      }
+      localStorage.setItem('GOOGLE_API_KEY', apiKey);
+    }
+
+    const google = createGoogleGenerativeAI({ apiKey });
+    
+    // Format questions for Gemini
+    const questionsText = questions.map((q, idx) => 
+      `Question ${idx}: ${q.question}\nOptions: ${q.options.map((opt, i) => `${i}. ${opt}`).join(', ')}`
+    ).join('\n\n');
+
+    const { object: answers } = await generateObject({
+      model: google('gemini-2.5-flash-lite'),
+      schema: QuizAnswersSchema,
+      prompt: `Analyze these coding/web development quiz questions and provide the correct answers. For each question, identify the correct answer index (0-based) and provide a brief explanation.
+
+${questionsText}
+
+Return the results in the specified JSON format with questionIndex (matching the question number), correctAnswerIndex (0-based index of the correct option), and explanation.`
+    });
+
+    console.log('📝 Quiz analysis complete:', answers);
+    
+    // Store in global variable
+    (window as any).quizAnswers = answers;
+    
+    // Automatically select the correct answers
+    selectAnswers(answers);
+    
+    console.log('🎯 All correct answers have been selected!');
+    
+  } catch (error) {
+    console.error('Error analyzing quiz questions:', error);
+    if (error instanceof Error && error.message.includes('API key')) {
+      localStorage.removeItem('GOOGLE_API_KEY');
+      console.log('API key cleared. Press Ctrl+P again to enter a new key.');
+    }
+  }
 }
 
 // Add keyboard event listener for Ctrl+P
@@ -58,14 +139,15 @@ document.addEventListener('keydown', function(event) {
     const quizQuestions = extractQuizQuestions();
     
     if (quizQuestions.length > 0) {
-      console.log('Quiz Questions Found:');
-      console.log(JSON.stringify(quizQuestions, null, 2));
+      console.log(`🔍 Found ${quizQuestions.length} quiz question(s)`);
       
       // Store in a global variable for easy access
       (window as any).quizData = quizQuestions;
-      console.log('Quiz data stored in window.quizData');
+      
+      // Analyze questions with Gemini and auto-select answers
+      analyzeQuizQuestions(quizQuestions);
     } else {
-      console.log('No quiz questions found on this page');
+      console.log('❌ No quiz questions found on this page');
     }
   }
 });
@@ -90,12 +172,17 @@ async function exampleFn(): Promise<void> {
     
     const google = createGoogleGenerativeAI({ apiKey });
     
-    const { text } = await generateText({
+    const { object } = await generateObject({
       model: google('gemini-2.5-flash-lite'),
-      prompt: 'Hello! Please respond with a friendly greeting and tell me something interesting about AI.',
+      schema: z.object({
+        greeting: z.string(),
+        fact: z.string(),
+        confidence: z.number().min(0).max(100)
+      }),
+      prompt: 'Hello! Please respond with a friendly greeting and tell me something interesting about AI. Also rate your confidence in the fact from 0-100.',
     });
 
-    console.log('Gemini Flash response:', text);
+    console.log('Gemini Flash response:', object);
   } catch (error) {
     console.error('Error calling Gemini Flash:', error);
     // If there's an auth error, clear the stored key so user can enter a new one
