@@ -1,221 +1,68 @@
-import { generateObject } from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
+import { ModeDetector } from './core/mode-detector';
+import { AIService } from './services/ai';
 
 // @ts-ignore isolatedModules
-console.log('FCC Helper userscript loaded');
+console.log('🚀 FCC Helper userscript loaded');
 
-// Expose exampleFn to global scope for browser console access
-declare global {
-  interface Window {
-    exampleFn: () => Promise<void>;
-  }
-}
+// Initialize the mode detector
+const modeDetector = new ModeDetector();
 
-interface QuizQuestion {
-  question: string;
-  options: string[];
-  questionIndex: number;
-}
-
-// Zod schema for structured quiz answers
-const QuizAnswersSchema = z.object({
-  answers: z.array(z.object({
-    questionIndex: z.number(),
-    correctAnswerIndex: z.number(),
-    explanation: z.string()
-  }))
-});
-
-function extractQuizQuestions(): QuizQuestion[] {
-  const fieldsets = document.querySelectorAll('fieldset');
-  const quizData: QuizQuestion[] = [];
-  let questionIndex = 0;
-
-  fieldsets.forEach(fieldset => {
-    // Extract question text from legend
-    const legendElement = fieldset.querySelector('.mcq-question-text');
-    if (!legendElement) return;
-
-    const questionText = legendElement.textContent?.trim() || '';
-    if (!questionText) return;
-
-    // Extract answer options
-    const optionElements = fieldset.querySelectorAll('.video-quiz-option');
-    const options: string[] = [];
-
-    optionElements.forEach(option => {
-      const optionText = option.textContent?.trim();
-      if (optionText) {
-        options.push(optionText);
-      }
-    });
-
-    if (options.length > 0) {
-      quizData.push({
-        question: questionText,
-        options: options,
-        questionIndex: questionIndex
-      });
-      questionIndex++;
-    }
-  });
-
-  return quizData;
-}
-
-function selectAnswers(answers: z.infer<typeof QuizAnswersSchema>): void {
-  answers.answers.forEach(answer => {
-    console.log(`🎯 Attempting to select answer ${answer.correctAnswerIndex} for question ${answer.questionIndex}`);
-    
-    // Find the label for this specific answer
-    const labelElement = document.querySelector(`label[for="mc-question-${answer.questionIndex}-answer-${answer.correctAnswerIndex}"]`) as HTMLLabelElement;
-    
-    if (labelElement) {
-      labelElement.click();
-      console.log(`✅ Selected answer ${answer.correctAnswerIndex} for question ${answer.questionIndex}: ${answer.explanation}`);
-    } else {
-      console.warn(`❌ Could not find label for question ${answer.questionIndex}, answer ${answer.correctAnswerIndex}`);
-      
-      // Debug: Show available labels
-      const allLabels = document.querySelectorAll('label[for*="mc-question"]');
-      console.log('Available labels:', Array.from(allLabels).map(label => label.getAttribute('for')));
-    }
-  });
-
-  // After selecting all answers, click the first button[type=button]
-  setTimeout(() => {
-    const firstButton = document.querySelector('button[type="button"]') as HTMLButtonElement;
-    if (firstButton) {
-      firstButton.click();
-      console.log('🚀 Clicked the first button to submit/continue');
-    } else {
-      console.warn('❌ Could not find button[type="button"] to click');
-      
-      // Debug: Show available buttons
-      const allButtons = document.querySelectorAll('button');
-      console.log('Available buttons:', Array.from(allButtons).map(btn => ({
-        type: btn.getAttribute('type'),
-        textContent: btn.textContent?.trim(),
-        className: btn.className
-      })));
-    }
-  }, 500); // Small delay to ensure all selections are processed
-}
-
-async function analyzeQuizQuestions(questions: QuizQuestion[]): Promise<void> {
-  try {
-    console.log('🧠 Analyzing quiz questions with Gemini...');
-    
-    // Get API key
-    let apiKey = localStorage.getItem('GOOGLE_API_KEY');
-    
-    if (!apiKey) {
-      apiKey = prompt('Please enter your Google API key (it will be saved in localStorage):');
-      if (!apiKey) {
-        console.error('API key is required to analyze quiz questions');
-        return;
-      }
-      localStorage.setItem('GOOGLE_API_KEY', apiKey);
-    }
-
-    const google = createGoogleGenerativeAI({ apiKey });
-    
-    // Format questions for Gemini
-    const questionsText = questions.map((q, idx) => 
-      `Question ${idx}: ${q.question}\nOptions: ${q.options.map((opt, i) => `${i}. ${opt}`).join(', ')}`
-    ).join('\n\n');
-
-    const { object: answers } = await generateObject({
-      model: google('gemini-2.5-flash-lite'),
-      schema: QuizAnswersSchema,
-      prompt: `Analyze these coding/web development quiz questions and provide the correct answers. For each question, identify the correct answer index (0-based) and provide a brief explanation.
-
-${questionsText}
-
-Return the results in the specified JSON format with questionIndex (matching the question number), correctAnswerIndex (0-based index of the correct option), and explanation.`
-    });
-
-    console.log('📝 Quiz analysis complete:', answers);
-    
-    // Store in global variable
-    (window as any).quizAnswers = answers;
-    
-    // Automatically select the correct answers
-    selectAnswers(answers);
-    
-    console.log('🎯 All correct answers have been selected!');
-    
-  } catch (error) {
-    console.error('Error analyzing quiz questions:', error);
-    if (error instanceof Error && error.message.includes('API key')) {
-      localStorage.removeItem('GOOGLE_API_KEY');
-      console.log('API key cleared. Press Ctrl+P again to enter a new key.');
-    }
-  }
-}
-
-// Add keyboard event listener for Ctrl+P
-document.addEventListener('keydown', function(event) {
+// Global keyboard event listener for Ctrl+P
+document.addEventListener('keydown', async function(event) {
   if (event.ctrlKey && event.key === 'p') {
     event.preventDefault(); // Prevent default print dialog
     
-    const quizQuestions = extractQuizQuestions();
-    
-    if (quizQuestions.length > 0) {
-      console.log(`🔍 Found ${quizQuestions.length} quiz question(s)`);
-      
-      // Store in a global variable for easy access
-      (window as any).quizData = quizQuestions;
-      
-      // Analyze questions with Gemini and auto-select answers
-      analyzeQuizQuestions(quizQuestions);
-    } else {
-      console.log('❌ No quiz questions found on this page');
-    }
+    console.log('🎯 FCC Helper activated (Ctrl+P)');
+    await modeDetector.executeCurrentMode();
   }
 });
 
+// Example function for testing AI service
 async function exampleFn(): Promise<void> {
   try {
-    console.log('Calling Gemini Flash...');
+    console.log('🧪 Testing Gemini connection...');
     
-    // Prompt user for API key since we're in a browser environment
-    let apiKey = localStorage.getItem('GOOGLE_API_KEY');
+    const aiService = AIService.getInstance();
     
-    if (!apiKey) {
-      apiKey = prompt('Please enter your Google API key (it will be saved in localStorage):');
-      if (!apiKey) {
-        console.error('API key is required to call Gemini Flash');
-        return;
-      }
-      localStorage.setItem('GOOGLE_API_KEY', apiKey);
-    }
-
-    console.log('Making request to Gemini Flash...');
-    
-    const google = createGoogleGenerativeAI({ apiKey });
-    
-    const { object } = await generateObject({
-      model: google('gemini-2.5-flash-lite'),
-      schema: z.object({
+    const response = await aiService.generateStructuredResponse(
+      z.object({
         greeting: z.string(),
         fact: z.string(),
         confidence: z.number().min(0).max(100)
       }),
-      prompt: 'Hello! Please respond with a friendly greeting and tell me something interesting about AI. Also rate your confidence in the fact from 0-100.',
-    });
+      'Hello! Please respond with a friendly greeting and tell me something interesting about AI. Also rate your confidence in the fact from 0-100.'
+    );
 
-    console.log('Gemini Flash response:', object);
+    console.log('✅ Gemini response:', response);
   } catch (error) {
-    console.error('Error calling Gemini Flash:', error);
-    // If there's an auth error, clear the stored key so user can enter a new one
-    if (error instanceof Error && error.message.includes('API key')) {
-      localStorage.removeItem('GOOGLE_API_KEY');
-      console.log('API key cleared. Run exampleFn() again to enter a new key.');
-    }
+    console.error('❌ Error testing Gemini:', error);
   }
 }
 
-// Make the function available globally for console access
+// Expose functions globally for console access
 window.exampleFn = exampleFn;
+
+// Add some helpful console commands
+(window as any).fccHelper = {
+  detectMode: () => {
+    const mode = modeDetector.detectCurrentMode();
+    console.log('Current mode:', mode?.name || 'None detected');
+    return mode;
+  },
+  listModes: () => {
+    const modes = modeDetector.listAvailableModes();
+    console.log('Available modes:', modes);
+    return modes;
+  },
+  executeMode: () => modeDetector.executeCurrentMode(),
+  clearApiKey: () => AIService.getInstance().clearApiKey()
+};
+
+console.log('💡 Available commands:');
+console.log('  - Ctrl+P: Auto-detect and execute current mode');
+console.log('  - exampleFn(): Test Gemini connection');
+console.log('  - fccHelper.detectMode(): Check current page mode');
+console.log('  - fccHelper.listModes(): List all available modes');
+console.log('  - fccHelper.executeMode(): Manually execute current mode');
+console.log('  - fccHelper.clearApiKey(): Clear stored API key');
