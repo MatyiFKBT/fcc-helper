@@ -1,12 +1,14 @@
 import { ModeHandler } from '../types';
 import { QuizModeHandler } from '../modes/quiz';
 import { BigQuizModeHandler } from '../modes/big-quiz';
+import { WorkshopModeHandler } from '../modes/workshop';
 import { LabModeHandler } from '../modes/lab';
 
 export class ModeDetector {
   private handlers: ModeHandler[] = [
     new QuizModeHandler(),
     new BigQuizModeHandler(),
+    new WorkshopModeHandler(),
     new LabModeHandler(),
   ];
 

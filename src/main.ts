@@ -1,12 +1,17 @@
 import { z } from 'zod';
 import { ModeDetector } from './core/mode-detector';
 import { AIService } from './services/ai';
+import { NotificationService } from './services/notifications';
 
 // @ts-ignore isolatedModules
 console.log('🚀 FCC Helper userscript loaded');
 
-// Initialize the mode detector
+// Initialize services
 const modeDetector = new ModeDetector();
+const notifications = NotificationService.getInstance();
+
+// Show welcome notification
+notifications.info('FCC Helper Loaded!', 'Press Ctrl+P to auto-solve quizzes and labs');
 
 // Global keyboard event listener for Ctrl+P
 document.addEventListener('keydown', async function(event) {
@@ -14,7 +19,12 @@ document.addEventListener('keydown', async function(event) {
     event.preventDefault(); // Prevent default print dialog
     
     console.log('🎯 FCC Helper activated (Ctrl+P)');
-    await modeDetector.executeCurrentMode();
+    notifications.info('FCC Helper Activated!', 'Detecting page type...');
+    
+    const success = await modeDetector.executeCurrentMode();
+    if (!success) {
+      notifications.warning('No Mode Detected', 'This page type is not supported yet');
+    }
   }
 });
 
@@ -22,6 +32,7 @@ document.addEventListener('keydown', async function(event) {
 async function exampleFn(): Promise<void> {
   try {
     console.log('🧪 Testing Gemini connection...');
+    notifications.info('Testing AI', 'Connecting to Gemma...');
     
     const aiService = AIService.getInstance();
     
@@ -35,8 +46,10 @@ async function exampleFn(): Promise<void> {
     );
 
     console.log('✅ Gemini response:', response);
+    notifications.success('AI Test Successful!', `Confidence: ${response.confidence}%`);
   } catch (error) {
     console.error('❌ Error testing Gemini:', error);
+    notifications.error('AI Test Failed', 'Could not connect to AI service');
   }
 }
 
@@ -48,15 +61,20 @@ window.exampleFn = exampleFn;
   detectMode: () => {
     const mode = modeDetector.detectCurrentMode();
     console.log('Current mode:', mode?.name || 'None detected');
+    notifications.info('Mode Detection', mode?.name || 'No mode detected');
     return mode;
   },
   listModes: () => {
     const modes = modeDetector.listAvailableModes();
     console.log('Available modes:', modes);
+    notifications.info('Available Modes', modes.join(', '));
     return modes;
   },
   executeMode: () => modeDetector.executeCurrentMode(),
-  clearApiKey: () => AIService.getInstance().clearApiKey()
+  clearApiKey: () => {
+    AIService.getInstance().clearApiKey();
+    notifications.info('API Key Cleared', 'Enter new key on next AI request');
+  }
 };
 
 console.log('💡 Available commands:');

@@ -1,8 +1,10 @@
 import { ModeHandler, BigQuizQuestion, BigQuizAnswers, BigQuizAnswersSchema } from '../types';
 import { AIService } from '../services/ai';
+import { NotificationService } from '../services/notifications';
 
 export class BigQuizModeHandler implements ModeHandler {
   name = 'BIGQUIZ';
+  private notifications = NotificationService.getInstance();
 
   detect(): boolean {
     return document.querySelector('.quiz-challenge-container') !== null &&
@@ -11,15 +13,18 @@ export class BigQuizModeHandler implements ModeHandler {
 
   async execute(): Promise<void> {
     console.log(`📝 ${this.name} mode detected`);
+    this.notifications.info('Big Quiz Detected!', 'Starting automatic quiz solver...');
     
     const questions = this.extractQuestions();
     
     if (questions.length === 0) {
       console.log('❌ No big quiz questions found');
+      this.notifications.error('No Questions Found', 'Could not find any big quiz questions on this page');
       return;
     }
 
     console.log(`🔍 Found ${questions.length} big quiz question(s)`);
+    this.notifications.success(`Found ${questions.length} Questions`, 'Analyzing with AI...');
     window.bigQuizData = questions;
 
     await this.analyzeAndSelectAnswers(questions);
@@ -71,6 +76,8 @@ export class BigQuizModeHandler implements ModeHandler {
   }
 
   private async analyzeAndSelectAnswers(questions: BigQuizQuestion[]): Promise<void> {
+    this.notifications.loading('Analyzing Questions', 'AI is solving the big quiz...');
+    
     try {
       console.log('🧠 Analyzing big quiz questions with Gemma...');
       
@@ -101,12 +108,16 @@ Respond with JSON in this exact format:
       console.log('📝 Big quiz analysis complete:', answers);
       window.bigQuizAnswers = answers;
 
+      this.notifications.closeLoading(true, 'Analysis Complete!', 'Selecting answers...');
+
       this.selectAnswers(answers);
       this.submitQuiz();
 
       console.log('🎯 Big quiz completed automatically!');
+      this.notifications.success('Big Quiz Completed!', 'All answers selected and submitted automatically');
     } catch (error) {
       console.error('Error analyzing big quiz:', error);
+      this.notifications.closeLoading(false, 'Analysis Failed', 'Could not analyze big quiz questions');
     }
   }
 
@@ -134,6 +145,7 @@ Respond with JSON in this exact format:
             return; // Exit early since we found and selected the answer
           } else {
             console.warn(`❌ Could not find radio option with value "${answer.correctValue}" for question ${answer.questionNumber}`);
+            this.notifications.warning('Selection Warning', `Could not select answer for question ${answer.questionNumber}`);
             
             // Debug: Show available options in this specific li
             const availableRadios = Array.from(li.querySelectorAll('[role="radio"]'));
@@ -147,6 +159,7 @@ Respond with JSON in this exact format:
       }
       
       console.warn(`❌ Could not find li element for question ${answer.questionNumber}`);
+      this.notifications.warning('Question Not Found', `Could not locate question ${answer.questionNumber}`);
     });
   }
 
@@ -159,6 +172,7 @@ Respond with JSON in this exact format:
         console.log('🚀 Submitted big quiz');
       } else {
         console.warn('❌ Could not find submit button');
+        this.notifications.warning('Submit Warning', 'Could not auto-submit big quiz. Please submit manually.');
         
         // Debug: Show available buttons
         const allButtons = document.querySelectorAll('button');

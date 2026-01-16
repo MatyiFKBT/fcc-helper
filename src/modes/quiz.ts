@@ -1,8 +1,10 @@
 import { ModeHandler, QuizQuestion, QuizAnswers, QuizAnswersSchema } from '../types';
 import { AIService } from '../services/ai';
+import { NotificationService } from '../services/notifications';
 
 export class QuizModeHandler implements ModeHandler {
   name = 'QUIZ';
+  private notifications = NotificationService.getInstance();
 
   detect(): boolean {
     return document.querySelectorAll('fieldset .mcq-question-text').length > 0;
@@ -10,15 +12,18 @@ export class QuizModeHandler implements ModeHandler {
 
   async execute(): Promise<void> {
     console.log(`🎯 ${this.name} mode detected`);
+    this.notifications.info('Quiz Detected!', 'Starting automatic quiz solver...');
     
     const questions = this.extractQuestions();
     
     if (questions.length === 0) {
       console.log('❌ No quiz questions found');
+      this.notifications.error('No Questions Found', 'Could not find any quiz questions on this page');
       return;
     }
 
     console.log(`🔍 Found ${questions.length} quiz question(s)`);
+    this.notifications.success(`Found ${questions.length} Questions`, 'Analyzing with AI...');
     window.quizData = questions;
 
     await this.analyzeAndSelectAnswers(questions);
@@ -60,8 +65,10 @@ export class QuizModeHandler implements ModeHandler {
   }
 
   private async analyzeAndSelectAnswers(questions: QuizQuestion[]): Promise<void> {
+    this.notifications.loading('Analyzing Questions', 'AI is solving the quiz...');
+    
     try {
-      console.log('🧠 Analyzing quiz questions with Gemini...');
+      console.log('🧠 Analyzing quiz questions with Gemma...');
       
       const questionsText = questions.map((q, idx) => 
         `Question ${idx}: ${q.question}\nOptions: ${q.options.map((opt, i) => `${i}. ${opt}`).join(', ')}`
@@ -79,12 +86,16 @@ Return the results in the specified JSON format with questionIndex (matching the
       console.log('📝 Quiz analysis complete:', answers);
       window.quizAnswers = answers;
 
+      this.notifications.closeLoading(true, 'Analysis Complete!', 'Selecting answers...');
+      
       this.selectAnswers(answers);
       this.submitQuiz();
 
       console.log('🎯 Quiz completed automatically!');
+      this.notifications.success('Quiz Completed!', 'All answers selected and submitted automatically');
     } catch (error) {
       console.error('Error analyzing quiz:', error);
+      this.notifications.closeLoading(false, 'Analysis Failed', 'Could not analyze quiz questions');
     }
   }
 
@@ -99,6 +110,7 @@ Return the results in the specified JSON format with questionIndex (matching the
         console.log(`✅ Selected: ${answer.explanation}`);
       } else {
         console.warn(`❌ Could not find label for question ${answer.questionIndex}, answer ${answer.correctAnswerIndex}`);
+        this.notifications.warning('Selection Warning', `Could not select answer for question ${answer.questionIndex + 1}`);
       }
     });
   }
@@ -111,6 +123,7 @@ Return the results in the specified JSON format with questionIndex (matching the
         console.log('🚀 Submitted quiz');
       } else {
         console.warn('❌ Could not find submit button');
+        this.notifications.warning('Submit Warning', 'Could not auto-submit quiz. Please submit manually.');
       }
     }, 500);
   }

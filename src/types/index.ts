@@ -44,6 +44,20 @@ export const BigQuizAnswersSchema = z.object({
 
 export type BigQuizAnswers = z.infer<typeof BigQuizAnswersSchema>;
 
+// Workshop-specific types
+export interface WorkshopData {
+  title: string;
+  task: string;
+  currentCode: string;
+}
+
+export const WorkshopSolutionSchema = z.object({
+  solution: z.string(),
+  explanation: z.string()
+});
+
+export type WorkshopSolution = z.infer<typeof WorkshopSolutionSchema>;
+
 // Lab-specific types (for future implementation)
 export interface LabTask {
   id: string;
@@ -67,6 +81,8 @@ declare global {
     quizAnswers?: QuizAnswers;
     bigQuizData?: BigQuizQuestion[];
     bigQuizAnswers?: BigQuizAnswers;
+    workshopData?: WorkshopData;
+    workshopSolution?: WorkshopSolution;
     labData?: LabTask[];
     labSolution?: LabSolution;
   }

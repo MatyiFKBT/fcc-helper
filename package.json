@@ -18,6 +18,7 @@
     "@google/generative-ai": "^0.24.1",
     "@types/node": "^25.0.8",
     "ai": "^6.0.37",
+    "sweetalert2": "^11.26.17",
     "zod": "^4.3.5"
   }
 }

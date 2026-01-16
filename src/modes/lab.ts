@@ -1,8 +1,11 @@
 import { ModeHandler, LabSolution, LabSolutionSchema } from '../types';
 import { AIService } from '../services/ai';
+import { NotificationService } from '../services/notifications';
 
 export class LabModeHandler implements ModeHandler {
   name = 'LAB';
+  private notifications = NotificationService.getInstance();
+  private hasClipboardPermission = false;
 
   detect(): boolean {
     // Detect lab pages by checking for the specific FCC lab structure
@@ -13,11 +16,13 @@ export class LabModeHandler implements ModeHandler {
 
   async execute(): Promise<void> {
     console.log(`🧪 ${this.name} mode detected`);
+    this.notifications.info('Lab Detected!', 'Starting automatic lab solver...');
     
     const labData = this.extractLabData();
     
     if (!labData.title && !labData.description && labData.testCases.length === 0) {
       console.log('❌ No lab data found');
+      this.notifications.error('No Lab Data Found', 'Could not extract lab information from this page');
       return;
     }
 
@@ -25,10 +30,56 @@ export class LabModeHandler implements ModeHandler {
     console.log(`📝 Description length: ${labData.description.length} chars`);
     console.log(`🧪 Test cases: ${labData.testCases.length}`);
 
+    this.notifications.success(`Lab Found: ${labData.title}`, `Found ${labData.testCases.length} test cases...`);
+
     // Store in global for debugging
     (window as any).labData = labData;
 
+    // Request clipboard permissions before proceeding
+    this.hasClipboardPermission = await this.requestClipboardPermission();
+    if (!this.hasClipboardPermission) {
+      this.notifications.warning('Clipboard Permission Denied', 'Solution will be shown in console only');
+    }
+
     await this.analyzeAndExecuteLab(labData);
+  }
+
+  private async requestClipboardPermission(): Promise<boolean> {
+    try {
+      // Check if clipboard API is available
+      if (!navigator.clipboard) {
+        console.warn('Clipboard API not available');
+        return false;
+      }
+
+      // Try to access clipboard directly first
+      try {
+        await navigator.clipboard.writeText('');
+        console.log('✅ Clipboard permission already granted');
+        return true;
+      } catch (error) {
+        // If direct access fails, ask user for permission
+        console.log('Clipboard access denied, asking user for permission');
+        
+        const userConsent = await this.notifications.confirm(
+          'Clipboard Permission',
+          'Allow FCC Helper to copy the solution to your clipboard?',
+          'Allow'
+        );
+
+        if (!userConsent) {
+          return false;
+        }
+
+        // Test clipboard access again after user consent
+        await navigator.clipboard.writeText('');
+        console.log('✅ Clipboard permission granted after user consent');
+        return true;
+      }
+    } catch (error) {
+      console.warn('Could not get clipboard permission:', error);
+      return false;
+    }
   }
 
   private extractLabData(): { title: string; description: string; testCases: string[] } {
@@ -62,6 +113,8 @@ export class LabModeHandler implements ModeHandler {
   }
 
   private async analyzeAndExecuteLab(labData: { title: string; description: string; testCases: string[] }): Promise<void> {
+    this.notifications.loading('Analyzing Lab', 'AI is solving the coding challenge...');
+    
     try {
       console.log('🧠 Analyzing lab with Gemma...');
       
@@ -90,11 +143,15 @@ Respond with JSON in this exact format:
       console.log('📝 Lab analysis complete:', solution);
       window.labSolution = solution;
 
+      const successMessage = this.hasClipboardPermission ? 'Code copied to clipboard' : 'Solution ready in console';
+      this.notifications.closeLoading(true, 'Solution Ready!', successMessage);
+
       this.displaySolution(solution);
 
       console.log('🎯 Lab solution ready!');
     } catch (error) {
       console.error('Error analyzing lab:', error);
+      this.notifications.closeLoading(false, 'Analysis Failed', 'Could not generate lab solution');
     }
   }
 
@@ -108,13 +165,17 @@ Respond with JSON in this exact format:
     console.log('📋 Copy the code above and paste it into the code editor!');
     console.log('💾 Solution also stored in window.labSolution.solution');
     
-    // Try to automatically copy to clipboard if possible
-    if (navigator.clipboard) {
+    // Only try to copy to clipboard if permission was granted
+    if (this.hasClipboardPermission && navigator.clipboard) {
       navigator.clipboard.writeText(solution.solution).then(() => {
         console.log('📎 Solution copied to clipboard!');
-      }).catch(() => {
-        console.log('❌ Could not copy to clipboard automatically');
+        this.notifications.success('Copied!', 'Solution copied to clipboard');
+      }).catch((error) => {
+        console.log('❌ Could not copy to clipboard:', error);
+        this.notifications.warning('Copy Failed', 'Could not copy to clipboard');
       });
+    } else if (!this.hasClipboardPermission) {
+      console.log('ℹ️ Clipboard access not granted - copy manually from console');
     }
   }
 }
