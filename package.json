@@ -1,5 +1,8 @@
 {
   "name": "fcc-helper",
+  "author": {
+    "name": "matyifkbt"
+  },
   "private": true,
   "version": "0.0.0",
   "type": "module",
