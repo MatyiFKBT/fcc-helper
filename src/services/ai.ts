@@ -37,7 +37,7 @@ export class AIService {
   public async generateStructuredResponse<T>(
     schema: z.ZodSchema<T>, 
     prompt: string, 
-    model: string = 'gemma-3-27b-it'
+    model: string = 'gemini-2.5-flash-lite'
   ): Promise<T> {
     try {
       await this.ensureApiKey();
